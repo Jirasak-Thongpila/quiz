@@ -61,6 +61,8 @@ export async function POST(
     const percentage = totalScore > 0 ? Math.round((score / totalScore) * 100 * 10) / 10 : 0;
     const seconds = Number(timeTakenSeconds) || 0;
 
+    const targetWebhook = quiz.settings.googleSheetsWebhook?.trim() || process.env.DEFAULT_GOOGLE_SHEETS_WEBHOOK?.trim() || '';
+
     const submission: QuizSubmission = {
       id: `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       quizId,
@@ -74,7 +76,7 @@ export async function POST(
       timeTakenFormatted: formatDuration(seconds),
       tabSwitchCount: Number(tabSwitchCount) || 0,
       answers: studentAnswers,
-      googleSheetsStatus: quiz.settings.googleSheetsWebhook ? 'failed' : 'not_configured',
+      googleSheetsStatus: targetWebhook ? 'failed' : 'not_configured',
       submittedAt: new Date().toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }),
     };
 
@@ -82,10 +84,10 @@ export async function POST(
     await saveSubmission(submission);
 
     // Sync to Google Sheets if configured
-    if (quiz.settings.googleSheetsWebhook) {
+    if (targetWebhook) {
       try {
         const syncResult = await sendSubmissionToGoogleSheets(
-          quiz.settings.googleSheetsWebhook,
+          targetWebhook,
           submission
         );
         if (syncResult.success) {

@@ -73,12 +73,20 @@ export async function sendSubmissionToGoogleSheets(
  * Ready-to-copy Google Apps Script code for teachers
  */
 export const GOOGLE_APPS_SCRIPT_TEMPLATE = `// -------------------------------------------------------------
-// Google Apps Script สำหรับรับผลคะแนนจากระบบ Quiz System
+// Google Apps Script สำหรับรับผลคะแนนจากระบบ Quiz System (แบบรวมไฟล์เดียว)
 // นำโค้ดนี้ไปวางใน Google Sheets: ส่วนขยาย (Extensions) > Apps Script
-// จากนั้นกด การทำให้ใช้งานได้ (Deploy) > การทำให้ใช้งานได้ใหม่ (New deployment)
-// เลือกประเภท: เว็บแอป (Web app)
-// การเข้าถึง (Who has access): ทุกคน (Anyone)
-// นำ URL ของเว็บแอปที่ได้ มาใส่ในช่อง "Google Sheets Webhook URL" ในระบบ Quiz
+//
+// จุดเด่น: 
+// 1. แยกแท็บ (Tab) ชีตย่อยตามชื่อชุดข้อสอบให้อัตโนมัติในไฟล์เดียว!
+// 2. นำ URL ไปใส่ใน .env.local ที่ DEFAULT_GOOGLE_SHEETS_WEBHOOK เพียงครั้งเดียว
+//    ต่อจากนี้ออกข้อสอบใหม่กี่ชุด ก็ไม่ต้องต่อ Google Sheet ใหม่อีกเลย!
+//
+// ขั้นตอน:
+// 1. กด การทำให้ใช้งานได้ (Deploy) > การทำให้ใช้งานได้ใหม่ (New deployment)
+// 2. เลือกประเภท: เว็บแอป (Web app)
+// 3. การเข้าถึง (Who has access): ทุกคน (Anyone)
+// 4. คัดลอก URL เว็บแอป ไปใส่ใน .env.local:
+//    DEFAULT_GOOGLE_SHEETS_WEBHOOK=https://script.google.com/macros/s/.../exec
 // -------------------------------------------------------------
 
 function doPost(e) {
@@ -86,9 +94,20 @@ function doPost(e) {
   lock.tryLock(10000); // ป้องกันการเขียนทับซ้อนกรณีส่งพร้อมกัน
 
   try {
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
     var rawData = e.postData.contents;
     var data = JSON.parse(rawData);
+
+    // ทำความสะอาดชื่อชุดข้อสอบเพื่อใช้เป็นชื่อชีตย่อย (Tab)
+    var rawTitle = data.quizTitle ? String(data.quizTitle).trim() : "คะแนนสอบ";
+    // ชื่อแท็บใน Google Sheets ห้ามมีตัวอักษร \\ / ? * : [ ] และยาวไม่เกิน 90 ตัวอักษร
+    var safeTabName = rawTitle.replace(/[\\\\/?*:\\[\\]]/g, "_").substring(0, 90);
+
+    // หาชีตย่อยตามชื่อชุดข้อสอบ หรือสร้างแท็บใหม่ทันทีหากยังไม่มี
+    var sheet = ss.getSheetByName(safeTabName);
+    if (!sheet) {
+      sheet = ss.insertSheet(safeTabName);
+    }
 
     // ตรวจสอบว่ามีแถวหัวตารางหรือยัง หากยังไม่มีให้สร้างอัตโนมัติ
     if (sheet.getLastRow() === 0) {
@@ -104,7 +123,7 @@ function doPost(e) {
         "สลับแท็บ (ครั้ง)"
       ]);
 
-      // ตกแต่งหัวตารางเล็กน้อย
+      // ตกแต่งหัวตาราง
       var headerRange = sheet.getRange(1, 1, 1, 9);
       headerRange.setBackground("#18181b");
       headerRange.setFontColor("#ffffff");
@@ -133,6 +152,7 @@ function doPost(e) {
 
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
+      sheet: safeTabName,
       row: lastRow
     })).setMimeType(ContentService.MimeType.JSON);
 

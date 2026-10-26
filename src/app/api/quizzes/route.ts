@@ -15,7 +15,11 @@ export async function GET() {
         title: q.title,
         description: q.description,
         accessCode: q.accessCode,
-        settings: q.settings,
+        settings: {
+          ...q.settings,
+          hasGlobalWebhook: Boolean(process.env.DEFAULT_GOOGLE_SHEETS_WEBHOOK),
+        },
+        hasGlobalWebhook: Boolean(process.env.DEFAULT_GOOGLE_SHEETS_WEBHOOK),
         questionCount: q.questions.length,
         submissionCount: submissions.length,
         createdAt: q.createdAt,

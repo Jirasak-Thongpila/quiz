@@ -11,8 +11,10 @@ export async function POST(
     const { submissionId } = await req.json();
 
     const quiz = await getQuizById(quizId);
-    if (!quiz || !quiz.settings.googleSheetsWebhook) {
-      return NextResponse.json({ error: 'ชุดข้อสอบนี้ยังไม่ได้ตั้งค่า Google Sheets Webhook' }, { status: 400 });
+    const targetWebhook = quiz?.settings.googleSheetsWebhook?.trim() || process.env.DEFAULT_GOOGLE_SHEETS_WEBHOOK?.trim() || '';
+
+    if (!quiz || !targetWebhook) {
+      return NextResponse.json({ error: 'ชุดข้อสอบนี้ยังไม่ได้ตั้งค่า Google Sheets Webhook ทั้งในชุดข้อสอบและระบบกลาง' }, { status: 400 });
     }
 
     const all = await getSubmissions(quizId);
@@ -21,7 +23,7 @@ export async function POST(
       return NextResponse.json({ error: 'ไม่พบรายการผลสอบนี้' }, { status: 404 });
     }
 
-    const result = await sendSubmissionToGoogleSheets(quiz.settings.googleSheetsWebhook, target);
+    const result = await sendSubmissionToGoogleSheets(targetWebhook, target);
 
     if (result.success) {
       await updateSubmission(target.id, {
