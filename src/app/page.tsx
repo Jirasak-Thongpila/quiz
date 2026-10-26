@@ -1,8 +1,15 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowRight, BookOpen, Clock, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import {
+  ArrowRight,
+  BookOpen,
+  Clock,
+  FileText,
+  CheckCircle2,
+  AlertCircle,
+} from "lucide-react";
 
 interface QuizSummary {
   id: string;
@@ -23,16 +30,16 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
 
   // Form states
-  const [studentId, setStudentId] = useState('');
-  const [fullName, setFullName] = useState('');
-  const [accessCode, setAccessCode] = useState('');
-  const [selectedQuizId, setSelectedQuizId] = useState('');
-  const [error, setError] = useState('');
+  const [studentId, setStudentId] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [accessCode, setAccessCode] = useState("");
+  const [selectedQuizId, setSelectedQuizId] = useState("");
+  const [error, setError] = useState("");
 
   useEffect(() => {
     // Restore previous student info if available
-    const savedId = sessionStorage.getItem('studentId') || '';
-    const savedName = sessionStorage.getItem('fullName') || '';
+    const savedId = sessionStorage.getItem("studentId") || "";
+    const savedName = sessionStorage.getItem("fullName") || "";
     if (savedId) setStudentId(savedId);
     if (savedName) setFullName(savedName);
 
@@ -42,7 +49,7 @@ export default function HomePage() {
   const fetchQuizzes = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/quizzes');
+      const res = await fetch("/api/quizzes");
       if (res.ok) {
         const data = await res.json();
         setQuizzes(data);
@@ -52,7 +59,7 @@ export default function HomePage() {
         }
       }
     } catch (err) {
-      console.error('Error fetching quizzes:', err);
+      console.error("Error fetching quizzes:", err);
     } finally {
       setLoading(false);
     }
@@ -61,39 +68,41 @@ export default function HomePage() {
   const handleSelectQuiz = (quiz: QuizSummary) => {
     setSelectedQuizId(quiz.id);
     setAccessCode(quiz.accessCode);
-    setError('');
+    setError("");
   };
 
   const handleStartExam = (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
+    setError("");
 
     const cleanId = studentId.trim();
     const cleanName = fullName.trim();
     const cleanCode = accessCode.trim();
 
     if (!cleanId) {
-      setError('กรุณากรอกรหัสนักศึกษา');
+      setError("กรุณากรอกรหัสนักศึกษา");
       return;
     }
     if (!cleanName) {
-      setError('กรุณากรอกชื่อ-นามสกุล');
+      setError("กรุณากรอกชื่อ-นามสกุล");
       return;
     }
 
     // Find quiz by access code or selected ID
     const target = quizzes.find(
-      q => q.accessCode.toLowerCase() === cleanCode.toLowerCase() || q.id === selectedQuizId
+      (q) =>
+        q.accessCode.toLowerCase() === cleanCode.toLowerCase() ||
+        q.id === selectedQuizId,
     );
 
     if (!target) {
-      setError('ไม่พบชุดข้อสอบหรือรหัสห้องสอบไม่ถูกต้อง');
+      setError("ไม่พบชุดข้อสอบหรือรหัสห้องสอบไม่ถูกต้อง");
       return;
     }
 
     // Save student details in sessionStorage
-    sessionStorage.setItem('studentId', cleanId);
-    sessionStorage.setItem('fullName', cleanName);
+    sessionStorage.setItem("studentId", cleanId);
+    sessionStorage.setItem("fullName", cleanName);
 
     router.push(`/quiz/${target.id}`);
   };
@@ -102,15 +111,11 @@ export default function HomePage() {
     <div className="flex-1 py-10 px-4 sm:px-6 max-w-5xl mx-auto w-full">
       {/* Hero Header */}
       <div className="text-center mb-10">
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300 mb-3 border border-zinc-200 dark:border-zinc-700">
-          <CheckCircle2 className="w-3.5 h-3.5 text-zinc-900 dark:text-zinc-100" />
-          ระบบสอบออนไลน์ Real-time Google Sheets
-        </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100">
           เข้าสู่ห้องสอบออนไลน์
         </h1>
         <p className="mt-2 text-zinc-500 dark:text-zinc-400 text-sm sm:text-base max-w-xl mx-auto">
-          กรอกรหัสนักศึกษาและชื่อ-นามสกุล เพื่อเริ่มต้นทำแบบทดสอบ ผลคะแนนจะถูกบันทึกและส่งเข้าชีตอาจารย์โดยอัตโนมัติ
+          กรอกรหัสนักศึกษาและชื่อ-นามสกุล เพื่อเริ่มต้นทำแบบทดสอบ
         </p>
       </div>
 
@@ -140,7 +145,7 @@ export default function HomePage() {
                 type="text"
                 placeholder="เช่น 6512345678"
                 value={studentId}
-                onChange={e => setStudentId(e.target.value)}
+                onChange={(e) => setStudentId(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 transition-all text-sm font-mono"
                 required
               />
@@ -154,7 +159,7 @@ export default function HomePage() {
                 type="text"
                 placeholder="เช่น นายสมชาย ใจดี"
                 value={fullName}
-                onChange={e => setFullName(e.target.value)}
+                onChange={(e) => setFullName(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 transition-all text-sm"
                 required
               />
@@ -168,7 +173,7 @@ export default function HomePage() {
                 type="text"
                 placeholder="เช่น 123456"
                 value={accessCode}
-                onChange={e => setAccessCode(e.target.value)}
+                onChange={(e) => setAccessCode(e.target.value)}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 placeholder:text-zinc-400 focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100 transition-all text-sm font-mono tracking-widest text-center uppercase"
               />
             </div>
@@ -190,24 +195,33 @@ export default function HomePage() {
               <BookOpen className="w-4 h-4" />
               <span>เลือกชุดข้อสอบ ({quizzes.length})</span>
             </h2>
-            <span className="text-xs text-zinc-500">คลิกเพื่อเลือกทำข้อสอบ</span>
+            <span className="text-xs text-zinc-500">
+              คลิกเพื่อเลือกทำข้อสอบ
+            </span>
           </div>
 
           {loading ? (
             <div className="space-y-3">
-              {[1, 2].map(i => (
-                <div key={i} className="h-28 rounded-2xl bg-zinc-200/60 dark:bg-zinc-800/60 animate-pulse" />
+              {[1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="h-28 rounded-2xl bg-zinc-200/60 dark:bg-zinc-800/60 animate-pulse"
+                />
               ))}
             </div>
           ) : quizzes.length === 0 ? (
             <div className="text-center py-12 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white/40 dark:bg-zinc-900/40">
               <FileText className="w-8 h-8 text-zinc-400 mx-auto mb-2" />
-              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">ยังไม่มีชุดข้อสอบในระบบ</p>
-              <p className="text-xs text-zinc-400 mt-1">ให้อาจารย์เข้าหน้า Admin เพื่อนำเข้าข้อสอบ</p>
+              <p className="text-sm font-medium text-zinc-600 dark:text-zinc-400">
+                ยังไม่มีชุดข้อสอบในระบบ
+              </p>
+              <p className="text-xs text-zinc-400 mt-1">
+                ให้อาจารย์เข้าหน้า Admin เพื่อนำเข้าข้อสอบ
+              </p>
             </div>
           ) : (
             <div className="space-y-3">
-              {quizzes.map(quiz => {
+              {quizzes.map((quiz) => {
                 const isSelected = selectedQuizId === quiz.id;
                 return (
                   <div
@@ -215,8 +229,8 @@ export default function HomePage() {
                     onClick={() => handleSelectQuiz(quiz)}
                     className={`cursor-pointer p-5 rounded-2xl border transition-all ${
                       isSelected
-                        ? 'border-zinc-900 bg-white dark:border-zinc-100 dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-900 dark:ring-zinc-100'
-                        : 'border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:border-zinc-700'
+                        ? "border-zinc-900 bg-white dark:border-zinc-100 dark:bg-zinc-900 shadow-sm ring-1 ring-zinc-900 dark:ring-zinc-100"
+                        : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/60 dark:hover:border-zinc-700"
                     }`}
                   >
                     <div className="flex items-start justify-between gap-4">
@@ -231,7 +245,9 @@ export default function HomePage() {
                               {quiz.settings.timeLimit} นาที
                             </span>
                           ) : (
-                            <span className="text-xs text-zinc-500">ไม่จำกัดเวลา</span>
+                            <span className="text-xs text-zinc-500">
+                              ไม่จำกัดเวลา
+                            </span>
                           )}
                         </div>
 
@@ -254,11 +270,13 @@ export default function HomePage() {
                           <div
                             className={`w-5 h-5 rounded-full border flex items-center justify-center transition-colors ${
                               isSelected
-                                ? 'border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900'
-                                : 'border-zinc-300 dark:border-zinc-700'
+                                ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+                                : "border-zinc-300 dark:border-zinc-700"
                             }`}
                           >
-                            {isSelected && <div className="w-2 h-2 rounded-full bg-white dark:bg-zinc-900" />}
+                            {isSelected && (
+                              <div className="w-2 h-2 rounded-full bg-white dark:bg-zinc-900" />
+                            )}
                           </div>
                         </div>
                       </div>

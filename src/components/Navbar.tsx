@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { CheckSquare, ShieldCheck, Home } from 'lucide-react';
+import ThemeToggle from './ThemeToggle';
 
 export default function Navbar() {
   const pathname = usePathname();
@@ -44,6 +45,10 @@ export default function Navbar() {
             <ShieldCheck className="w-4 h-4" />
             <span>สำหรับอาจารย์</span>
           </Link>
+
+          <div className="w-px h-5 bg-zinc-200 dark:bg-zinc-800 mx-0.5" />
+
+          <ThemeToggle />
         </nav>
       </div>
     </header>
