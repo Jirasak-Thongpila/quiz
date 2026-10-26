@@ -88,7 +88,8 @@ export async function POST(
       try {
         const syncResult = await sendSubmissionToGoogleSheets(
           targetWebhook,
-          submission
+          submission,
+          quiz
         );
         if (syncResult.success) {
           submission.googleSheetsStatus = 'synced';

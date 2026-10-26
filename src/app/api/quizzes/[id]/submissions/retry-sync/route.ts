@@ -23,7 +23,7 @@ export async function POST(
       return NextResponse.json({ error: 'ไม่พบรายการผลสอบนี้' }, { status: 404 });
     }
 
-    const result = await sendSubmissionToGoogleSheets(targetWebhook, target);
+    const result = await sendSubmissionToGoogleSheets(targetWebhook, target, quiz);
 
     if (result.success) {
       await updateSubmission(target.id, {

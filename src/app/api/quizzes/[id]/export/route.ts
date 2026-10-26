@@ -16,24 +16,28 @@ export async function GET(
 
     const submissions = await getSubmissions(quizId);
 
-    // Build data array
-    const data: (string | number)[][] = [
-      [
-        'วันที่-เวลาที่ส่ง',
-        'รหัสนักศึกษา',
-        'ชื่อ - นามสกุล',
-        'ชุดข้อสอบ',
-        'คะแนนที่ได้',
-        'คะแนนเต็ม',
-        'คิดเป็นร้อยละ (%)',
-        'เวลาที่ใช้',
-        'สลับแท็บ (ครั้ง)',
-        'สถานะ Google Sheets'
-      ]
+    // Build data array with per-question breakdown
+    const headerRow: string[] = [
+      'วันที่-เวลาที่ส่ง',
+      'รหัสนักศึกษา',
+      'ชื่อ - นามสกุล',
+      'ชุดข้อสอบ',
+      'คะแนนที่ได้',
+      'คะแนนเต็ม',
+      'คิดเป็นร้อยละ (%)',
+      'เวลาที่ใช้',
+      'สลับแท็บ (ครั้ง)',
+      'สถานะ Google Sheets'
     ];
 
+    quiz.questions.forEach(q => {
+      headerRow.push(`ข้อ ${q.number} (เฉลย: ${q.correctAnswerKey})`);
+    });
+
+    const data: (string | number)[][] = [headerRow];
+
     submissions.forEach(s => {
-      data.push([
+      const row: (string | number)[] = [
         s.submittedAt,
         s.studentId,
         s.fullName,
@@ -44,7 +48,20 @@ export async function GET(
         s.timeTakenFormatted,
         s.tabSwitchCount,
         s.googleSheetsStatus === 'synced' ? 'ซิงค์สำเร็จ' : s.googleSheetsStatus === 'failed' ? 'ซิงค์ไม่สำเร็จ' : 'ไม่ได้เชื่อมต่อ'
-      ]);
+      ];
+
+      quiz.questions.forEach(q => {
+        const selected = (s.answers && s.answers[q.id]) || '';
+        if (!selected) {
+          row.push(`- ไม่ได้ตอบ (เฉลย: ${q.correctAnswerKey})`);
+        } else if (selected.trim() === q.correctAnswerKey.trim()) {
+          row.push(`✓ ${selected.trim()}`);
+        } else {
+          row.push(`✗ ${selected.trim()} (เฉลย: ${q.correctAnswerKey})`);
+        }
+      });
+
+      data.push(row);
     });
 
     const ws = XLSX.utils.aoa_to_sheet(data);
