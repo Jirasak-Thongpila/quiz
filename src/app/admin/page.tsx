@@ -56,7 +56,6 @@ export default function AdminPage() {
   const [allowRetake, setAllowRetake] = useState(false);
   const [tabSwitchWarning, setTabSwitchWarning] = useState(true);
   const [showScoreOnComplete, setShowScoreOnComplete] = useState(true);
-  const [googleSheetsWebhook, setGoogleSheetsWebhook] = useState('');
   const [hasGlobalWebhook, setHasGlobalWebhook] = useState(false);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
 
@@ -325,7 +324,7 @@ export default function AdminPage() {
             allowRetake,
             tabSwitchWarning,
             showScoreOnComplete,
-            googleSheetsWebhook,
+            googleSheetsWebhook: '',
           },
           questions,
         }),
@@ -345,7 +344,6 @@ export default function AdminPage() {
       setDescription('');
       setAccessCode('');
       setQuestions([]);
-      setGoogleSheetsWebhook('');
 
       // Refresh list & select created
       fetchQuizzes();
@@ -861,40 +859,6 @@ export default function AdminPage() {
                     <span>แสดงคะแนนทันทีหลังนักศึกษาส่งข้อสอบ</span>
                   </label>
                 </div>
-              </div>
-
-              {/* Google Sheets Webhook URL */}
-              <div>
-                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1.5 flex flex-wrap items-center justify-between gap-1">
-                  <span className="flex items-center gap-2">
-                    <span>Google Sheets Webhook URL</span>
-                    {hasGlobalWebhook && (
-                      <span className="text-[11px] font-normal normal-case text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        เปิดใช้งาน Webhook กลางใน .env แล้ว (แยก Tab อัตโนมัติ)
-                      </span>
-                    )}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('guide')}
-                    className="text-[11px] text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 underline"
-                  >
-                    ดูวิธีสร้าง Webhook รวม
-                  </button>
-                </label>
-                <input
-                  type="url"
-                  placeholder={hasGlobalWebhook ? "เว้นว่างไว้เพื่อใช้ Webhook กลางอัตโนมัติ (หรือระบุหากต้องการส่งไป Sheet อื่น)" : "https://script.google.com/macros/s/.../exec"}
-                  value={googleSheetsWebhook}
-                  onChange={e => setGoogleSheetsWebhook(e.target.value)}
-                  className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-zinc-900 dark:focus:ring-zinc-100"
-                />
-                <p className="text-[11px] text-zinc-400 mt-1">
-                  {hasGlobalWebhook
-                    ? "✨ ระบบเปิดใช้งาน Webhook กลางไว้แล้ว จะบันทึกคะแนนและสร้างแท็บชีตตามชื่อข้อสอบให้อัตโนมัติ ไม่จำเป็นต้องกรอกช่องนี้ครับ"
-                    : "*สามารถนำ Webhook URL ไปใส่ใน .env.local ที่ DEFAULT_GOOGLE_SHEETS_WEBHOOK เพื่อใช้กับทุกข้อสอบโดยไม่ต้องกรอกซ้ำ"}
-                </p>
               </div>
 
               {/* Section: Question Import & Builder */}
