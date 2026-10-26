@@ -21,10 +21,11 @@ interface QuizSummary {
   description: string;
   accessCode: string;
   questionCount: number;
-  submissionCount: number;
+  submissionCount?: number;
   settings: {
     timeLimit: number;
     allowRetake: boolean;
+    isPublic?: boolean;
   };
 }
 
@@ -75,15 +76,63 @@ export default function HomePage() {
     });
   }, [fetchQuizzes]);
 
-  // Real-time matched quiz preview
-  const matchedQuiz = useMemo(() => {
+  const [checkingCode, setCheckingCode] = useState(false);
+  const [remoteMatchedQuiz, setRemoteMatchedQuiz] = useState<QuizSummary | null>(null);
+
+  // Real-time matched quiz preview from local public list
+  const localMatchedQuiz = useMemo(() => {
     const cleanCode = accessCode.trim().toLowerCase();
     if (!cleanCode) return null;
     return quizzes.find((q) => q.accessCode.trim().toLowerCase() === cleanCode) || null;
   }, [quizzes, accessCode]);
 
+  // Live lookup from server if not found in public list (for private quizzes)
+  useEffect(() => {
+    const cleanCode = accessCode.trim().toLowerCase();
+    if (!cleanCode || cleanCode.length < 3) {
+      return;
+    }
+
+    const localMatch = quizzes.find((q) => q.accessCode.trim().toLowerCase() === cleanCode);
+    if (localMatch) {
+      return;
+    }
+
+    let isMounted = true;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/quizzes?code=${encodeURIComponent(cleanCode)}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (isMounted && data && data.id) {
+            setRemoteMatchedQuiz(data);
+            return;
+          }
+        }
+        if (isMounted) setRemoteMatchedQuiz(null);
+      } catch {
+        if (isMounted) setRemoteMatchedQuiz(null);
+      }
+    }, 300);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [accessCode, quizzes]);
+
+  const activeMatchedQuiz = useMemo(() => {
+    const cleanCode = accessCode.trim().toLowerCase();
+    if (!cleanCode) return null;
+    if (localMatchedQuiz) return localMatchedQuiz;
+    if (remoteMatchedQuiz && remoteMatchedQuiz.accessCode.trim().toLowerCase() === cleanCode) {
+      return remoteMatchedQuiz;
+    }
+    return null;
+  }, [accessCode, localMatchedQuiz, remoteMatchedQuiz]);
+
   // When clicking "เข้าร่วมห้องสอบ" from center code input
-  const handleJoinWithCode = (e: React.FormEvent) => {
+  const handleJoinWithCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
 
@@ -93,19 +142,45 @@ export default function HomePage() {
       return;
     }
 
-    // Match quiz by access code
-    const found = quizzes.find(
+    // 1. Check local public list
+    const foundLocal = quizzes.find(
       (q) => q.accessCode.trim().toLowerCase() === cleanCode.toLowerCase()
     );
 
-    if (!found) {
-      setError("ไม่พบชุดข้อสอบจากรหัสห้องสอบนี้ โปรดตรวจสอบรหัสที่อาจารย์แจ้งอีกครั้ง");
+    if (foundLocal) {
+      setTargetQuiz(foundLocal);
+      setModalError("");
+      setShowStudentModal(true);
       return;
     }
 
-    setTargetQuiz(found);
-    setModalError("");
-    setShowStudentModal(true);
+    // 2. Check remote matched quiz
+    if (remoteMatchedQuiz && remoteMatchedQuiz.accessCode.trim().toLowerCase() === cleanCode.toLowerCase()) {
+      setTargetQuiz(remoteMatchedQuiz);
+      setModalError("");
+      setShowStudentModal(true);
+      return;
+    }
+
+    // 3. Fallback direct API verification
+    setCheckingCode(true);
+    try {
+      const res = await fetch(`/api/quizzes?code=${encodeURIComponent(cleanCode)}`);
+      if (res.ok) {
+        const foundFromApi = await res.json();
+        if (foundFromApi && foundFromApi.id) {
+          setTargetQuiz(foundFromApi);
+          setModalError("");
+          setShowStudentModal(true);
+          return;
+        }
+      }
+      setError("ไม่พบชุดข้อสอบจากรหัสห้องสอบนี้ โปรดตรวจสอบรหัสที่อาจารย์แจ้งอีกครั้ง");
+    } catch {
+      setError("เกิดข้อผิดพลาดในการตรวจสอบรหัสห้องสอบ");
+    } finally {
+      setCheckingCode(false);
+    }
   };
 
   // When clicking a quiz from the compact self-study list below
@@ -176,19 +251,26 @@ export default function HomePage() {
           </div>
 
           {/* Matched Quiz Live Preview */}
-          {matchedQuiz && (
+          {activeMatchedQuiz && (
             <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 flex items-start gap-2.5 text-xs text-emerald-800 dark:text-emerald-300 animate-in fade-in transition-all">
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-600 dark:text-emerald-400 mt-0.5" />
               <div className="flex-1 min-w-0">
-                <div className="font-semibold text-emerald-900 dark:text-emerald-200 truncate">
-                  {matchedQuiz.title}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="font-semibold text-emerald-900 dark:text-emerald-200 truncate">
+                    {activeMatchedQuiz.title}
+                  </span>
+                  {activeMatchedQuiz.settings?.isPublic === false && (
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 font-semibold">
+                      🔒 ห้องสอบส่วนตัว
+                    </span>
+                  )}
                 </div>
                 <div className="text-[11px] text-emerald-700 dark:text-emerald-400 mt-0.5 flex items-center gap-2">
-                  <span>{matchedQuiz.questionCount} ข้อ</span>
+                  <span>{activeMatchedQuiz.questionCount} ข้อ</span>
                   <span>•</span>
                   <span>
-                    {matchedQuiz.settings.timeLimit > 0
-                      ? `${matchedQuiz.settings.timeLimit} นาที`
+                    {activeMatchedQuiz.settings.timeLimit > 0
+                      ? `${activeMatchedQuiz.settings.timeLimit} นาที`
                       : "ไม่จำกัดเวลา"}
                   </span>
                 </div>
@@ -205,9 +287,10 @@ export default function HomePage() {
 
           <button
             type="submit"
-            className="w-full py-4 px-6 rounded-2xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 font-bold text-base flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99] cursor-pointer"
+            disabled={checkingCode}
+            className="w-full py-4 px-6 rounded-2xl bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 hover:bg-zinc-800 dark:hover:bg-zinc-200 font-bold text-base flex items-center justify-center gap-2 shadow-sm transition-all active:scale-[0.99] cursor-pointer disabled:opacity-75"
           >
-            <span>เข้าร่วมห้องสอบ</span>
+            <span>{checkingCode ? "กำลังตรวจสอบรหัส..." : "เข้าร่วมห้องสอบ"}</span>
             <ArrowRight className="w-5 h-5" />
           </button>
         </form>
@@ -222,7 +305,7 @@ export default function HomePage() {
               <span>หรือเลือกทำแบบฝึกหัดด้วยตนเอง ({quizzes.length})</span>
             </h2>
             <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
-              คลิกชุดข้อสอบด้านล่างเพื่อเลือกทำแบบฝึกหัดได้ทันทีโดยไม่ต้องจำรหัส
+              แบบฝึกหัดสาธารณะที่สามารถคลิกเลือกทำได้ทันทีโดยไม่ต้องจำรหัส
             </p>
           </div>
         </div>
@@ -238,7 +321,7 @@ export default function HomePage() {
           </div>
         ) : quizzes.length === 0 ? (
           <div className="text-center py-8 border border-dashed border-zinc-200 dark:border-zinc-800 rounded-2xl bg-white/40 dark:bg-zinc-900/40">
-            <p className="text-xs text-zinc-500">ยังไม่มีชุดข้อสอบในระบบ</p>
+            <p className="text-xs text-zinc-500">ไม่มีแบบฝึกหัดสาธารณะในขณะนี้ (กรุณากรอกรหัสห้องสอบจากอาจารย์ด้านบน)</p>
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

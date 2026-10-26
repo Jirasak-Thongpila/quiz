@@ -22,7 +22,8 @@ import {
   AlertCircle,
   FileText,
   Edit,
-  ArrowRight
+  ArrowRight,
+  Globe
 } from 'lucide-react';
 import { Quiz, QuizQuestion, QuizSubmission } from '@/types/quiz';
 import { parseCSV, parseExcel } from '@/lib/parser';
@@ -46,10 +47,14 @@ export default function AdminPage() {
   const [submissionsLoading, setSubmissionsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Helper to generate 6-digit room code
+  const generateAccessCode = () => Math.floor(100000 + Math.random() * 900000).toString();
+
   // Create Quiz Form states
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [accessCode, setAccessCode] = useState('');
+  const [isPublic, setIsPublic] = useState(false); // default: ส่วนตัว (Private)
   const [timeLimit, setTimeLimit] = useState(20);
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [shuffleChoices, setShuffleChoices] = useState(true);
@@ -147,6 +152,13 @@ export default function AdminPage() {
     } finally {
       setSubmissionsLoading(false);
     }
+  }, []);
+
+  // Initialize random access code on mount
+  useEffect(() => {
+    queueMicrotask(() => {
+      setAccessCode(generateAccessCode());
+    });
   }, []);
 
   // Check saved admin key in sessionStorage
@@ -316,7 +328,7 @@ export default function AdminPage() {
         body: JSON.stringify({
           title,
           description,
-          accessCode: accessCode.trim() || Math.floor(100000 + Math.random() * 900000).toString(),
+          accessCode: accessCode.trim() || generateAccessCode(),
           settings: {
             timeLimit,
             shuffleQuestions,
@@ -325,6 +337,7 @@ export default function AdminPage() {
             tabSwitchWarning,
             showScoreOnComplete,
             googleSheetsWebhook: '',
+            isPublic,
           },
           questions,
         }),
@@ -342,7 +355,8 @@ export default function AdminPage() {
       // Reset form
       setTitle('');
       setDescription('');
-      setAccessCode('');
+      setAccessCode(generateAccessCode());
+      setIsPublic(false);
       setQuestions([]);
 
       // Refresh list & select created
@@ -353,6 +367,36 @@ export default function AdminPage() {
       setSaveError('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     } finally {
       setSavingQuiz(false);
+    }
+  };
+
+  // Re-generate random access code
+  const handleRegenerateCode = () => {
+    setAccessCode(generateAccessCode());
+  };
+
+  // Quick Toggle Public / Private visibility
+  const handleToggleQuizVisibility = async (quiz: Quiz) => {
+    const currentIsPublic = quiz.settings?.isPublic !== undefined ? quiz.settings.isPublic : true;
+    const newIsPublic = !currentIsPublic;
+    try {
+      const res = await fetch(`/api/quizzes/${quiz.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: {
+            ...quiz.settings,
+            isPublic: newIsPublic,
+          },
+        }),
+      });
+      if (res.ok) {
+        fetchQuizzes();
+      } else {
+        alert('เปลี่ยนสถานะไม่สำเร็จ');
+      }
+    } catch {
+      alert('เกิดข้อผิดพลาดในการเปลี่ยนสถานะ');
     }
   };
 
@@ -617,9 +661,22 @@ export default function AdminPage() {
                   >
                     <div>
                       <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200">
-                          รหัส: {quiz.accessCode}
-                        </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800 text-zinc-800 dark:text-zinc-200">
+                            รหัส: {quiz.accessCode}
+                          </span>
+                          {quiz.settings?.isPublic ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-800/60 font-medium flex items-center gap-1">
+                              <Globe className="w-3 h-3" />
+                              สาธารณะ
+                            </span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 font-medium flex items-center gap-1">
+                              <Lock className="w-3 h-3" />
+                              ส่วนตัว
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[11px] text-zinc-400">
                           {quiz.createdAt ? new Date(quiz.createdAt).toLocaleDateString('th-TH') : ''}
                         </span>
@@ -688,6 +745,17 @@ export default function AdminPage() {
                       </div>
 
                       <div className="flex items-center gap-1">
+                        <button
+                          onClick={() => handleToggleQuizVisibility(quiz)}
+                          className="p-1.5 rounded-lg text-zinc-400 hover:text-zinc-900 dark:hover:text-zinc-100 hover:bg-zinc-100 dark:hover:bg-zinc-800 transition-colors"
+                          title={quiz.settings?.isPublic ? 'คลิกเพื่อเปลี่ยนเป็นข้อสอบส่วนตัว (ซ่อนจากหน้าแรก)' : 'คลิกเพื่อเปลี่ยนเป็นข้อสอบสาธารณะ (แสดงหน้าแรก)'}
+                        >
+                          {quiz.settings?.isPublic ? (
+                            <Globe className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                          ) : (
+                            <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                          )}
+                        </button>
                         <Link
                           href={`/quiz/${quiz.id}`}
                           target="_blank"
@@ -770,16 +838,40 @@ export default function AdminPage() {
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1.5">
-                      รหัสห้องสอบ (Access Code)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="เว้นว่างเพื่อให้ระบบสุ่ม 6 หลัก"
-                      value={accessCode}
-                      onChange={e => setAccessCode(e.target.value)}
-                      className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 text-sm font-mono"
-                    />
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">
+                        รหัสห้องสอบ (Access Code)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleRegenerateCode}
+                        className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1 font-medium cursor-pointer"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>สุ่มรหัสใหม่</span>
+                      </button>
+                    </div>
+                    <div className="relative flex items-center">
+                      <input
+                        type="text"
+                        placeholder="รหัสห้องสอบ 6 หลัก"
+                        value={accessCode}
+                        onChange={e => setAccessCode(e.target.value.toUpperCase())}
+                        className="w-full px-4 py-2.5 pr-24 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 text-sm font-mono tracking-wider font-bold"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleRegenerateCode}
+                        className="absolute right-2 px-2.5 py-1 rounded-lg text-xs font-medium bg-zinc-200/70 hover:bg-zinc-300 dark:bg-zinc-700 dark:hover:bg-zinc-600 text-zinc-700 dark:text-zinc-200 transition-colors flex items-center gap-1 cursor-pointer"
+                        title="สุ่มรหัสใหม่"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        <span>สุ่มใหม่</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-zinc-500 mt-1">
+                      ระบบสุ่มรหัส 6 หลักให้อัตโนมัติ หรือแก้ไขเป็นรหัสที่ต้องการได้
+                    </p>
                   </div>
 
                   <div>
@@ -794,6 +886,84 @@ export default function AdminPage() {
                       onChange={e => setTimeLimit(Number(e.target.value))}
                       className="w-full px-4 py-2.5 rounded-xl border border-zinc-200 dark:border-zinc-700 bg-zinc-50/50 dark:bg-zinc-800/50 text-zinc-900 dark:text-zinc-100 text-sm font-mono"
                     />
+                    <p className="text-[11px] text-zinc-500 mt-1">
+                      กำหนดเวลาในการทำข้อสอบ (เช่น 20 หรือ 30 นาที)
+                    </p>
+                  </div>
+                </div>
+
+                {/* Visibility (ส่วนตัว vs สาธารณะ) */}
+                <div className="p-4 rounded-2xl bg-zinc-50 dark:bg-zinc-800/40 border border-zinc-200/80 dark:border-zinc-800 space-y-3">
+                  <div>
+                    <span className="text-xs font-bold uppercase tracking-wider text-zinc-700 dark:text-zinc-300 block">
+                      รูปแบบการเปิดห้องสอบ (Visibility)
+                    </span>
+                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                      เลือกว่าต้องการให้ห้องสอบนี้เป็นแบบส่วนตัวเฉพาะผู้มีรหัส หรือเปิดสาธารณะในหน้าแรก
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {/* Private Option */}
+                    <div
+                      onClick={() => setIsPublic(false)}
+                      className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                        !isPublic
+                          ? 'border-zinc-900 bg-white dark:border-zinc-100 dark:bg-zinc-900 shadow-xs'
+                          : 'border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-800/20 hover:border-zinc-300 dark:hover:border-zinc-700 opacity-75'
+                      }`}
+                    >
+                      <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                        !isPublic
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                          : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
+                      }`}>
+                        <Lock className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                            🔒 ส่วนตัว (Private)
+                          </span>
+                          {!isPublic && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-900/60 dark:text-amber-300 font-semibold">
+                              ค่าเริ่มต้น
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                          ให้อาจารย์ส่งรหัสให้นักศึกษาเท่านั้น ซ่อนจากหน้าแรก นักศึกษาต้องกรอกรหัสห้องสอบตรงกลางเท่านั้นจึงจะเข้าได้
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Public Option */}
+                    <div
+                      onClick={() => setIsPublic(true)}
+                      className={`p-3.5 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-3 ${
+                        isPublic
+                          ? 'border-zinc-900 bg-white dark:border-zinc-100 dark:bg-zinc-900 shadow-xs'
+                          : 'border-zinc-200 dark:border-zinc-800 bg-zinc-100/50 dark:bg-zinc-800/20 hover:border-zinc-300 dark:hover:border-zinc-700 opacity-75'
+                      }`}
+                    >
+                      <div className={`p-2 rounded-xl shrink-0 mt-0.5 ${
+                        isPublic
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                          : 'bg-zinc-200 dark:bg-zinc-800 text-zinc-500'
+                      }`}>
+                        <Globe className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs font-bold text-zinc-900 dark:text-zinc-100">
+                            🌐 สาธารณะ (Public)
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1 leading-relaxed">
+                          แสดงในรายการแบบฝึกหัดหน้าแรก ให้นักศึกษาหรือคนทั่วไปคลิกเลือกทำข้อสอบได้ทันทีโดยไม่ต้องจำรหัส
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

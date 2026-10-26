@@ -2,13 +2,45 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getQuizzes, saveQuiz, getSubmissions } from '@/lib/storage';
 import { Quiz } from '@/types/quiz';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
     const quizzes = await getQuizzes();
     const allSubmissions = await getSubmissions();
 
+    // 1. If searching for a specific accessCode (student entering code directly)
+    const code = req.nextUrl.searchParams.get('code');
+    if (code) {
+      const cleanCode = code.trim().toLowerCase();
+      const matched = quizzes.find(q => q.accessCode.trim().toLowerCase() === cleanCode);
+      if (!matched) {
+        return NextResponse.json({ error: 'ไม่พบชุดข้อสอบจากรหัสห้องสอบนี้' }, { status: 404 });
+      }
+      return NextResponse.json({
+        id: matched.id,
+        title: matched.title,
+        description: matched.description,
+        accessCode: matched.accessCode,
+        settings: {
+          timeLimit: matched.settings?.timeLimit || 0,
+          allowRetake: Boolean(matched.settings?.allowRetake),
+          isPublic: matched.settings?.isPublic !== false,
+        },
+        questionCount: matched.questions.length,
+      });
+    }
+
+    // 2. Check if caller is admin
+    const adminKey = req.headers.get('x-admin-key');
+    const isAdmin = Boolean(adminKey && adminKey === (process.env.ADMIN_SECRET_KEY || 'admin1234'));
+
     // Attach submission counts
-    const summary = quizzes.map(q => {
+    let filteredQuizzes = quizzes;
+    if (!isAdmin) {
+      // Non-admin public list: only return public quizzes (or older quizzes without isPublic set)
+      filteredQuizzes = quizzes.filter(q => q.settings?.isPublic !== false);
+    }
+
+    const summary = filteredQuizzes.map(q => {
       const submissions = allSubmissions.filter(s => s.quizId === q.id);
       return {
         id: q.id,
@@ -17,6 +49,7 @@ export async function GET() {
         accessCode: q.accessCode,
         settings: {
           ...q.settings,
+          isPublic: q.settings?.isPublic !== undefined ? Boolean(q.settings.isPublic) : true,
           hasGlobalWebhook: Boolean(process.env.DEFAULT_GOOGLE_SHEETS_WEBHOOK),
         },
         hasGlobalWebhook: Boolean(process.env.DEFAULT_GOOGLE_SHEETS_WEBHOOK),
@@ -59,6 +92,7 @@ export async function POST(req: NextRequest) {
         tabSwitchWarning: Boolean(settings?.tabSwitchWarning),
         showScoreOnComplete: settings?.showScoreOnComplete !== undefined ? Boolean(settings.showScoreOnComplete) : true,
         googleSheetsWebhook: settings?.googleSheetsWebhook?.trim() || '',
+        isPublic: settings?.isPublic !== undefined ? Boolean(settings.isPublic) : false,
       },
       questions,
       createdAt: new Date().toISOString(),
