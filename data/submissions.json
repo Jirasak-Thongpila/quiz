@@ -1,0 +1,39 @@
+[
+  {
+    "id": "sub_1792982605877_pqepz",
+    "quizId": "quiz-sample-network",
+    "quizTitle": "แบบทดสอบเครือข่ายคอมพิวเตอร์ (TCP/IP & OSI Models)",
+    "studentId": "6712732103",
+    "fullName": "นายจิรศักดิ์ ทองพิละ",
+    "score": 5,
+    "totalScore": 20,
+    "percentage": 25,
+    "timeTakenSeconds": 46,
+    "timeTakenFormatted": "46 วินาที",
+    "tabSwitchCount": 0,
+    "answers": {
+      "q_13": "ง",
+      "q_15": "ข",
+      "q_19": "ก",
+      "q_2": "ข",
+      "q_9": "ง",
+      "q_8": "ค",
+      "q_16": "ข",
+      "q_5": "ก",
+      "q_10": "ค",
+      "q_4": "ก",
+      "q_20": "ก",
+      "q_17": "ค",
+      "q_12": "ข",
+      "q_11": "ง",
+      "q_7": "ข",
+      "q_6": "ข",
+      "q_14": "ก",
+      "q_1": "ง",
+      "q_18": "ง",
+      "q_3": "ค"
+    },
+    "googleSheetsStatus": "not_configured",
+    "submittedAt": "26/10/2569 09:43:25"
+  }
+]
