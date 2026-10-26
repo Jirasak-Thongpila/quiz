@@ -1,12 +1,65 @@
 import fs from 'fs/promises';
 import path from 'path';
+import { neon } from '@neondatabase/serverless';
 import { Quiz, QuizSubmission, QuizQuestion } from '@/types/quiz';
 
 const DATA_DIR = path.join(process.cwd(), 'data');
 const QUIZZES_FILE = path.join(DATA_DIR, 'quizzes.json');
 const SUBMISSIONS_FILE = path.join(DATA_DIR, 'submissions.json');
 
-// Ensure directory exists
+// Get Neon client if DATABASE_URL is set
+function getNeon() {
+  const url = process.env.DATABASE_URL?.trim();
+  if (!url || !url.startsWith('postgres')) return null;
+  return neon(url);
+}
+
+let neonInitialized = false;
+async function ensureNeonTables() {
+  const sql = getNeon();
+  if (!sql || neonInitialized) return;
+
+  try {
+    await sql`
+      CREATE TABLE IF NOT EXISTS quizzes (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT,
+        access_code TEXT NOT NULL,
+        settings JSONB NOT NULL,
+        questions JSONB NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `;
+
+    await sql`
+      CREATE TABLE IF NOT EXISTS submissions (
+        id TEXT PRIMARY KEY,
+        quiz_id TEXT NOT NULL,
+        quiz_title TEXT NOT NULL,
+        student_id TEXT NOT NULL,
+        full_name TEXT NOT NULL,
+        score NUMERIC NOT NULL,
+        total_score NUMERIC NOT NULL,
+        percentage NUMERIC NOT NULL,
+        time_taken_seconds INT NOT NULL,
+        time_taken_formatted TEXT NOT NULL,
+        tab_switch_count INT NOT NULL,
+        answers JSONB NOT NULL,
+        google_sheets_status TEXT NOT NULL,
+        google_sheets_error TEXT,
+        submitted_at TEXT NOT NULL
+      );
+    `;
+
+    neonInitialized = true;
+  } catch (err) {
+    console.error('Failed to init Neon tables:', err);
+  }
+}
+
+// Ensure local directory exists
 async function ensureDir() {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
@@ -305,7 +358,7 @@ const SEED_QUIZ: Quiz = {
   description: "แบบทดสอบความรู้พื้นฐานเกี่ยวกับ Layer ในแบบจำลอง OSI และ TCP/IP Protocol Suite",
   accessCode: "123456",
   settings: {
-    timeLimit: 20, // 20 minutes
+    timeLimit: 20,
     shuffleQuestions: true,
     shuffleChoices: true,
     allowRetake: false,
@@ -319,16 +372,37 @@ const SEED_QUIZ: Quiz = {
 };
 
 /**
- * Reads all quizzes from file (with automatic seed)
+ * Reads all quizzes (from Neon if available, otherwise local file)
  */
 export async function getQuizzes(): Promise<Quiz[]> {
+  const sql = getNeon();
+  if (sql) {
+    await ensureNeonTables();
+    try {
+      const rows = await sql`
+        SELECT id, title, description, access_code as "accessCode",
+               settings, questions, created_at as "createdAt", updated_at as "updatedAt"
+        FROM quizzes
+        ORDER BY created_at DESC;
+      `;
+      if (rows.length === 0) {
+        // Seed Neon if empty
+        await saveQuiz(SEED_QUIZ);
+        return [SEED_QUIZ];
+      }
+      return rows as unknown as Quiz[];
+    } catch (err) {
+      console.error('Neon getQuizzes error:', err);
+    }
+  }
+
+  // Fallback to local file
   await ensureDir();
   try {
     const data = await fs.readFile(QUIZZES_FILE, 'utf-8');
     const quizzes = JSON.parse(data) as Quiz[];
     return quizzes;
   } catch (err) {
-    // File doesn't exist or is invalid; seed it
     const initial = [SEED_QUIZ];
     await fs.writeFile(QUIZZES_FILE, JSON.stringify(initial, null, 2), 'utf-8');
     return initial;
@@ -339,10 +413,41 @@ export async function getQuizzes(): Promise<Quiz[]> {
  * Saves a quiz (create or update)
  */
 export async function saveQuiz(quiz: Quiz): Promise<Quiz> {
+  quiz.updatedAt = new Date().toISOString();
+
+  const sql = getNeon();
+  if (sql) {
+    await ensureNeonTables();
+    try {
+      await sql`
+        INSERT INTO quizzes (id, title, description, access_code, settings, questions, created_at, updated_at)
+        VALUES (
+          ${quiz.id},
+          ${quiz.title},
+          ${quiz.description || ''},
+          ${quiz.accessCode},
+          ${JSON.stringify(quiz.settings)},
+          ${JSON.stringify(quiz.questions)},
+          ${quiz.createdAt || new Date().toISOString()},
+          ${quiz.updatedAt}
+        )
+        ON CONFLICT (id) DO UPDATE SET
+          title = EXCLUDED.title,
+          description = EXCLUDED.description,
+          access_code = EXCLUDED.access_code,
+          settings = EXCLUDED.settings,
+          questions = EXCLUDED.questions,
+          updated_at = EXCLUDED.updated_at;
+      `;
+      return quiz;
+    } catch (err) {
+      console.error('Neon saveQuiz error:', err);
+    }
+  }
+
+  // Fallback to local file
   const quizzes = await getQuizzes();
   const index = quizzes.findIndex(q => q.id === quiz.id);
-
-  quiz.updatedAt = new Date().toISOString();
 
   if (index >= 0) {
     quizzes[index] = quiz;
@@ -362,6 +467,23 @@ export async function saveQuiz(quiz: Quiz): Promise<Quiz> {
  * Gets a quiz by ID
  */
 export async function getQuizById(id: string): Promise<Quiz | null> {
+  const sql = getNeon();
+  if (sql) {
+    await ensureNeonTables();
+    try {
+      const rows = await sql`
+        SELECT id, title, description, access_code as "accessCode",
+               settings, questions, created_at as "createdAt", updated_at as "updatedAt"
+        FROM quizzes
+        WHERE id = ${id}
+        LIMIT 1;
+      `;
+      if (rows.length > 0) return rows[0] as unknown as Quiz;
+    } catch (err) {
+      console.error('Neon getQuizById error:', err);
+    }
+  }
+
   const quizzes = await getQuizzes();
   return quizzes.find(q => q.id === id) || null;
 }
@@ -370,8 +492,26 @@ export async function getQuizById(id: string): Promise<Quiz | null> {
  * Gets a quiz by 6-digit access code
  */
 export async function getQuizByAccessCode(code: string): Promise<Quiz | null> {
-  const quizzes = await getQuizzes();
+  const sql = getNeon();
   const cleanCode = code.trim().toLowerCase();
+
+  if (sql) {
+    await ensureNeonTables();
+    try {
+      const rows = await sql`
+        SELECT id, title, description, access_code as "accessCode",
+               settings, questions, created_at as "createdAt", updated_at as "updatedAt"
+        FROM quizzes
+        WHERE LOWER(access_code) = ${cleanCode}
+        LIMIT 1;
+      `;
+      if (rows.length > 0) return rows[0] as unknown as Quiz;
+    } catch (err) {
+      console.error('Neon getQuizByAccessCode error:', err);
+    }
+  }
+
+  const quizzes = await getQuizzes();
   return quizzes.find(q => q.accessCode.trim().toLowerCase() === cleanCode) || null;
 }
 
@@ -379,6 +519,18 @@ export async function getQuizByAccessCode(code: string): Promise<Quiz | null> {
  * Deletes a quiz by ID
  */
 export async function deleteQuiz(id: string): Promise<boolean> {
+  const sql = getNeon();
+  if (sql) {
+    await ensureNeonTables();
+    try {
+      await sql`DELETE FROM submissions WHERE quiz_id = ${id};`;
+      await sql`DELETE FROM quizzes WHERE id = ${id};`;
+      return true;
+    } catch (err) {
+      console.error('Neon deleteQuiz error:', err);
+    }
+  }
+
   const quizzes = await getQuizzes();
   const filtered = quizzes.filter(q => q.id !== id);
   if (filtered.length === quizzes.length) return false;
@@ -394,6 +546,42 @@ export async function deleteQuiz(id: string): Promise<boolean> {
  * Reads all submissions (optionally filtered by quizId)
  */
 export async function getSubmissions(quizId?: string): Promise<QuizSubmission[]> {
+  const sql = getNeon();
+  if (sql) {
+    await ensureNeonTables();
+    try {
+      let rows;
+      if (quizId) {
+        rows = await sql`
+          SELECT id, quiz_id as "quizId", quiz_title as "quizTitle", student_id as "studentId",
+                 full_name as "fullName", score::float, total_score::float as "totalScore",
+                 percentage::float, time_taken_seconds as "timeTakenSeconds",
+                 time_taken_formatted as "timeTakenFormatted", tab_switch_count as "tabSwitchCount",
+                 answers, google_sheets_status as "googleSheetsStatus",
+                 google_sheets_error as "googleSheetsError", submitted_at as "submittedAt"
+          FROM submissions
+          WHERE quiz_id = ${quizId}
+          ORDER BY id DESC;
+        `;
+      } else {
+        rows = await sql`
+          SELECT id, quiz_id as "quizId", quiz_title as "quizTitle", student_id as "studentId",
+                 full_name as "fullName", score::float, total_score::float as "totalScore",
+                 percentage::float, time_taken_seconds as "timeTakenSeconds",
+                 time_taken_formatted as "timeTakenFormatted", tab_switch_count as "tabSwitchCount",
+                 answers, google_sheets_status as "googleSheetsStatus",
+                 google_sheets_error as "googleSheetsError", submitted_at as "submittedAt"
+          FROM submissions
+          ORDER BY id DESC;
+        `;
+      }
+      return rows as unknown as QuizSubmission[];
+    } catch (err) {
+      console.error('Neon getSubmissions error:', err);
+    }
+  }
+
+  // Fallback to local file
   await ensureDir();
   try {
     const data = await fs.readFile(SUBMISSIONS_FILE, 'utf-8');
@@ -411,6 +599,40 @@ export async function getSubmissions(quizId?: string): Promise<QuizSubmission[]>
  * Saves a submission
  */
 export async function saveSubmission(submission: QuizSubmission): Promise<QuizSubmission> {
+  const sql = getNeon();
+  if (sql) {
+    await ensureNeonTables();
+    try {
+      await sql`
+        INSERT INTO submissions (
+          id, quiz_id, quiz_title, student_id, full_name, score, total_score,
+          percentage, time_taken_seconds, time_taken_formatted, tab_switch_count,
+          answers, google_sheets_status, google_sheets_error, submitted_at
+        ) VALUES (
+          ${submission.id},
+          ${submission.quizId},
+          ${submission.quizTitle},
+          ${submission.studentId},
+          ${submission.fullName},
+          ${submission.score},
+          ${submission.totalScore},
+          ${submission.percentage},
+          ${submission.timeTakenSeconds},
+          ${submission.timeTakenFormatted},
+          ${submission.tabSwitchCount},
+          ${JSON.stringify(submission.answers)},
+          ${submission.googleSheetsStatus},
+          ${submission.googleSheetsError || null},
+          ${submission.submittedAt}
+        );
+      `;
+      return submission;
+    } catch (err) {
+      console.error('Neon saveSubmission error:', err);
+    }
+  }
+
+  // Fallback to local file
   const list = await getSubmissions();
   list.unshift(submission);
 
@@ -423,9 +645,29 @@ export async function saveSubmission(submission: QuizSubmission): Promise<QuizSu
 }
 
 /**
- * Updates a submission status (e.g. after Google Sheets retry)
+ * Updates a submission status
  */
 export async function updateSubmission(id: string, updates: Partial<QuizSubmission>): Promise<QuizSubmission | null> {
+  const sql = getNeon();
+  if (sql) {
+    await ensureNeonTables();
+    try {
+      if (updates.googleSheetsStatus !== undefined) {
+        await sql`
+          UPDATE submissions
+          SET google_sheets_status = ${updates.googleSheetsStatus},
+              google_sheets_error = ${updates.googleSheetsError || null}
+          WHERE id = ${id};
+        `;
+      }
+      const rows = await sql`SELECT * FROM submissions WHERE id = ${id} LIMIT 1;`;
+      if (rows.length > 0) return rows[0] as unknown as QuizSubmission;
+    } catch (err) {
+      console.error('Neon updateSubmission error:', err);
+    }
+  }
+
+  // Fallback to local file
   const list = await getSubmissions();
   const index = list.findIndex(s => s.id === id);
   if (index === -1) return null;
@@ -444,6 +686,18 @@ export async function updateSubmission(id: string, updates: Partial<QuizSubmissi
  * Deletes a submission by ID
  */
 export async function deleteSubmission(id: string): Promise<boolean> {
+  const sql = getNeon();
+  if (sql) {
+    await ensureNeonTables();
+    try {
+      await sql`DELETE FROM submissions WHERE id = ${id};`;
+      return true;
+    } catch (err) {
+      console.error('Neon deleteSubmission error:', err);
+    }
+  }
+
+  // Fallback to local file
   const list = await getSubmissions();
   const filtered = list.filter(s => s.id !== id);
   if (filtered.length === list.length) return false;
