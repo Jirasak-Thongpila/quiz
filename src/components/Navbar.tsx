@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { CheckSquare, ShieldCheck, Home } from 'lucide-react';
+import { ShieldCheck, Home } from 'lucide-react';
 import ThemeToggle from './ThemeToggle';
 
 export default function Navbar() {

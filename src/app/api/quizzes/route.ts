@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getQuizzes, saveQuiz, getSubmissions } from '@/lib/storage';
 import { Quiz } from '@/types/quiz';
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     const quizzes = await getQuizzes();
     const allSubmissions = await getSubmissions();

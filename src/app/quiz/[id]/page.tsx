@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef, use, Suspense } from 'react';
+import { useState, useEffect, useCallback, use, Suspense } from 'react';
 import { useRouter } from 'next/navigation';
 import confetti from 'canvas-confetti';
 import {
@@ -10,10 +10,8 @@ import {
   ChevronRight,
   Send,
   CheckCircle2,
-  HelpCircle,
   Home,
   RefreshCw,
-  Eye,
   AlertCircle
 } from 'lucide-react';
 import { Quiz, QuizQuestion } from '@/types/quiz';
@@ -40,7 +38,7 @@ function QuizTakingContent({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({}); // questionId -> optionKey
   const [timeLeft, setTimeLeft] = useState<number | null>(null);
-  const [startTime, setStartTime] = useState<number>(Date.now());
+  const [startTime, setStartTime] = useState<number>(0);
   const [tabSwitchCount, setTabSwitchCount] = useState(0);
   const [showTabWarning, setShowTabWarning] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
@@ -57,138 +55,23 @@ function QuizTakingContent({
     googleSheetsStatus: string;
   } | null>(null);
 
-  // Load Quiz & Check Student Info
-  useEffect(() => {
-    const sId = sessionStorage.getItem('studentId') || '';
-    const sName = sessionStorage.getItem('fullName') || '';
-
-    if (!sId || !sName) {
-      setStudentInputModal(true);
-    } else {
-      setStudentId(sId);
-      setFullName(sName);
-    }
-
-    fetchQuiz();
-  }, [quizId]);
-
-  const fetchQuiz = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/quizzes/${quizId}`);
-      if (!res.ok) {
-        const err = await res.json();
-        setLoadError(err.error || 'ไม่สามารถโหลดข้อสอบได้');
-        return;
-      }
-      const data: Quiz = await res.json();
-      setQuiz(data);
-
-      // Initialize Timer if timeLimit > 0
-      if (data.settings.timeLimit > 0) {
-        setTimeLeft(data.settings.timeLimit * 60);
-      }
-      setStartTime(Date.now());
-    } catch (err) {
-      setLoadError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Timer countdown hook
-  useEffect(() => {
-    if (timeLeft === null || completed) return;
-
-    if (timeLeft <= 0) {
-      // Auto submit when time runs out
-      handleSubmitExam();
-      return;
-    }
-
-    const timer = setInterval(() => {
-      setTimeLeft(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [timeLeft, completed]);
-
-  // Tab switch detection hook
-  useEffect(() => {
-    if (!quiz?.settings.tabSwitchWarning || completed) return;
-
-    const handleVisibilityChange = () => {
-      if (document.hidden) {
-        setTabSwitchCount(prev => {
-          const next = prev + 1;
-          setShowTabWarning(true);
-          return next;
-        });
-      }
-    };
-
-    const handleBlur = () => {
-      setTabSwitchCount(prev => {
-        const next = prev + 1;
-        setShowTabWarning(true);
-        return next;
-      });
-    };
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('blur', handleBlur);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('blur', handleBlur);
-    };
-  }, [quiz?.settings.tabSwitchWarning, completed]);
-
   // Handle option selection
-  const handleSelectOption = (questionId: string, optionKey: string) => {
+  const handleSelectOption = useCallback((questionId: string, optionKey: string) => {
     if (completed || submitting) return;
     setAnswers(prev => ({
       ...prev,
       [questionId]: optionKey,
     }));
-  };
-
-  // Keyboard shortcut listener (1-4 or ก-ง for options, Arrows for nav)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (completed || submitting || showSubmitConfirm || showTabWarning || studentInputModal) return;
-      if (!quiz || !quiz.questions[currentIndex]) return;
-
-      const currentQ = quiz.questions[currentIndex];
-      const key = e.key.toLowerCase();
-
-      // Number keys 1, 2, 3, 4, 5
-      const num = parseInt(key, 10);
-      if (!isNaN(num) && num >= 1 && num <= currentQ.options.length) {
-        handleSelectOption(currentQ.id, currentQ.options[num - 1].key);
-        return;
-      }
-
-      // Arrows
-      if (e.key === 'ArrowRight' && currentIndex < quiz.questions.length - 1) {
-        setCurrentIndex(prev => prev + 1);
-      } else if (e.key === 'ArrowLeft' && currentIndex > 0) {
-        setCurrentIndex(prev => prev - 1);
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [quiz, currentIndex, completed, submitting, showSubmitConfirm, showTabWarning, studentInputModal]);
+  }, [completed, submitting]);
 
   // Submit Exam handler
-  const handleSubmitExam = async () => {
+  const handleSubmitExam = useCallback(async () => {
     if (!quiz || submitting || completed) return;
 
     setSubmitting(true);
     setSubmitError('');
 
-    const timeSpentSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+    const timeSpentSeconds = Math.max(1, Math.round((Date.now() - (startTime || Date.now())) / 1000));
 
     try {
       const res = await fetch(`/api/quizzes/${quiz.id}/submit`, {
@@ -231,15 +114,134 @@ function QuizTakingContent({
           spread: 70,
           origin: { y: 0.6 },
         });
-      } catch (err) {
+      } catch {
         // Ignore confetti if unsupported
       }
-    } catch (err) {
+    } catch {
       setSubmitError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ กรุณากดลองใหม่อีกครั้ง');
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [quiz, submitting, completed, startTime, studentId, fullName, answers, tabSwitchCount]);
+
+  // Fetch Quiz definition
+  const fetchQuiz = useCallback(async () => {
+    try {
+      setLoading(true);
+      const res = await fetch(`/api/quizzes/${quizId}`);
+      if (!res.ok) {
+        const err = await res.json();
+        setLoadError(err.error || 'ไม่สามารถโหลดข้อสอบได้');
+        return;
+      }
+      const data: Quiz = await res.json();
+      setQuiz(data);
+
+      // Initialize Timer if timeLimit > 0
+      if (data.settings.timeLimit > 0) {
+        setTimeLeft(data.settings.timeLimit * 60);
+      }
+      setStartTime(Date.now());
+    } catch {
+      setLoadError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } finally {
+      setLoading(false);
+    }
+  }, [quizId]);
+
+  // Load Quiz & Check Student Info
+  useEffect(() => {
+    const sId = sessionStorage.getItem('studentId') || '';
+    const sName = sessionStorage.getItem('fullName') || '';
+
+    queueMicrotask(() => {
+      if (!sId || !sName) {
+        setStudentInputModal(true);
+      } else {
+        setStudentId(sId);
+        setFullName(sName);
+      }
+      fetchQuiz();
+    });
+  }, [fetchQuiz]);
+
+  // Timer countdown hook
+  useEffect(() => {
+    if (timeLeft === null || completed) return;
+
+    if (timeLeft <= 0) {
+      // Auto submit when time runs out
+      queueMicrotask(() => {
+        handleSubmitExam();
+      });
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setTimeLeft(prev => (prev !== null && prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [timeLeft, completed, handleSubmitExam]);
+
+  // Tab switch detection hook
+  useEffect(() => {
+    if (!quiz?.settings.tabSwitchWarning || completed) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        setTabSwitchCount(prev => {
+          const next = prev + 1;
+          setShowTabWarning(true);
+          return next;
+        });
+      }
+    };
+
+    const handleBlur = () => {
+      setTabSwitchCount(prev => {
+        const next = prev + 1;
+        setShowTabWarning(true);
+        return next;
+      });
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleBlur);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleBlur);
+    };
+  }, [quiz?.settings.tabSwitchWarning, completed]);
+
+  // Keyboard shortcut listener (1-4 or ก-ง for options, Arrows for nav)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (completed || submitting || showSubmitConfirm || showTabWarning || studentInputModal) return;
+      if (!quiz || !quiz.questions[currentIndex]) return;
+
+      const currentQ = quiz.questions[currentIndex];
+      const key = e.key.toLowerCase();
+
+      // Number keys 1, 2, 3, 4, 5
+      const num = parseInt(key, 10);
+      if (!isNaN(num) && num >= 1 && num <= currentQ.options.length) {
+        handleSelectOption(currentQ.id, currentQ.options[num - 1].key);
+        return;
+      }
+
+      // Arrows
+      if (e.key === 'ArrowRight' && currentIndex < quiz.questions.length - 1) {
+        setCurrentIndex(prev => prev + 1);
+      } else if (e.key === 'ArrowLeft' && currentIndex > 0) {
+        setCurrentIndex(prev => prev - 1);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [quiz, currentIndex, completed, submitting, showSubmitConfirm, showTabWarning, studentInputModal, handleSelectOption]);
 
   const handleStudentModalSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -534,7 +536,7 @@ function QuizTakingContent({
           </div>
 
           {/* Numbers Grid */}
-          <div className="grid grid-cols-5 gap-2.5 max-h-[360px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-5 gap-2.5 max-h-90 overflow-y-auto pr-1">
             {quiz.questions.map((q, idx) => {
               const isAnswered = Boolean(answers[q.id]);
               const isCurrent = idx === currentIndex;
@@ -735,4 +737,3 @@ export default function QuizTakingPage(props: {
     </Suspense>
   );
 }
-

@@ -63,7 +63,7 @@ async function ensureNeonTables() {
 async function ensureDir() {
   try {
     await fs.mkdir(DATA_DIR, { recursive: true });
-  } catch (err) {
+  } catch {
     // Ignore if directory exists
   }
 }
@@ -402,7 +402,7 @@ export async function getQuizzes(): Promise<Quiz[]> {
     const data = await fs.readFile(QUIZZES_FILE, 'utf-8');
     const quizzes = JSON.parse(data) as Quiz[];
     return quizzes;
-  } catch (err) {
+  } catch {
     const initial = [SEED_QUIZ];
     await fs.writeFile(QUIZZES_FILE, JSON.stringify(initial, null, 2), 'utf-8');
     return initial;
@@ -590,7 +590,7 @@ export async function getSubmissions(quizId?: string): Promise<QuizSubmission[]>
       return list.filter(s => s.quizId === quizId);
     }
     return list;
-  } catch (err) {
+  } catch {
     return [];
   }
 }

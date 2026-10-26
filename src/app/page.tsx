@@ -1,13 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   BookOpen,
   Clock,
   FileText,
-  CheckCircle2,
   AlertCircle,
 } from "lucide-react";
 
@@ -36,17 +35,7 @@ export default function HomePage() {
   const [selectedQuizId, setSelectedQuizId] = useState("");
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    // Restore previous student info if available
-    const savedId = sessionStorage.getItem("studentId") || "";
-    const savedName = sessionStorage.getItem("fullName") || "";
-    if (savedId) setStudentId(savedId);
-    if (savedName) setFullName(savedName);
-
-    fetchQuizzes();
-  }, []);
-
-  const fetchQuizzes = async () => {
+  const fetchQuizzes = useCallback(async () => {
     try {
       setLoading(true);
       const res = await fetch("/api/quizzes");
@@ -63,7 +52,23 @@ export default function HomePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    // Restore previous student info if available
+    const savedId = sessionStorage.getItem("studentId") || "";
+    const savedName = sessionStorage.getItem("fullName") || "";
+    if (savedId || savedName) {
+      queueMicrotask(() => {
+        if (savedId) setStudentId(savedId);
+        if (savedName) setFullName(savedName);
+      });
+    }
+
+    queueMicrotask(() => {
+      fetchQuizzes();
+    });
+  }, [fetchQuizzes]);
 
   const handleSelectQuiz = (quiz: QuizSummary) => {
     setSelectedQuizId(quiz.id);

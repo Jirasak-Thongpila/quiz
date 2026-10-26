@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import * as XLSX from 'xlsx';
 import {
   Lock,
   Plus,
@@ -16,14 +15,10 @@ import {
   Search,
   Users,
   Award,
-  AlertTriangle,
   FileUp,
   Link as LinkIcon,
-  HelpCircle,
   Clock,
   Layers,
-  ChevronDown,
-  ChevronUp,
   AlertCircle,
   FileText,
   Edit,
@@ -86,15 +81,28 @@ export default function AdminPage() {
   const [expandedQuestionId, setExpandedQuestionId] = useState<string | null>(null);
   const [retryingSyncId, setRetryingSyncId] = useState<string | null>(null);
 
-  // Check saved admin key in sessionStorage
-  useEffect(() => {
-    const savedKey = sessionStorage.getItem('adminSecretKey');
-    if (savedKey) {
-      verifyKey(savedKey);
+  const fetchQuizzes = useCallback(async (adminKey?: string) => {
+    setQuizzesLoading(true);
+    try {
+      const key = adminKey || sessionStorage.getItem('adminSecretKey') || '';
+      const res = await fetch('/api/quizzes', {
+        headers: { 'x-admin-key': key },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setQuizzes(data);
+        if (data.length > 0) {
+          setSelectedQuizId(prev => prev || data[0].id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to load quizzes:', err);
+    } finally {
+      setQuizzesLoading(false);
     }
   }, []);
 
-  const verifyKey = async (key: string) => {
+  const verifyKey = useCallback(async (key: string) => {
     setAuthLoading(true);
     setAuthError('');
     try {
@@ -112,54 +120,14 @@ export default function AdminPage() {
         setAuthError(data.message || 'รหัสผ่าน Admin ไม่ถูกต้อง');
         sessionStorage.removeItem('adminSecretKey');
       }
-    } catch (err) {
+    } catch {
       setAuthError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์');
     } finally {
       setAuthLoading(false);
     }
-  };
+  }, [fetchQuizzes]);
 
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!secretKeyInput.trim()) return;
-    verifyKey(secretKeyInput.trim());
-  };
-
-  const handleLogout = () => {
-    sessionStorage.removeItem('adminSecretKey');
-    setIsAuthenticated(false);
-    setSecretKeyInput('');
-  };
-
-  const fetchQuizzes = async (adminKey?: string) => {
-    setQuizzesLoading(true);
-    try {
-      const key = adminKey || sessionStorage.getItem('adminSecretKey') || '';
-      const res = await fetch('/api/quizzes', {
-        headers: { 'x-admin-key': key },
-      });
-      if (res.ok) {
-        const data = await res.json();
-        setQuizzes(data);
-        if (data.length > 0 && !selectedQuizId) {
-          setSelectedQuizId(data[0].id);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load quizzes:', err);
-    } finally {
-      setQuizzesLoading(false);
-    }
-  };
-
-  // Fetch submissions when selectedQuizId changes
-  useEffect(() => {
-    if (selectedQuizId && isAuthenticated) {
-      fetchSubmissions(selectedQuizId);
-    }
-  }, [selectedQuizId, isAuthenticated]);
-
-  const fetchSubmissions = async (quizId: string) => {
+  const fetchSubmissions = useCallback(async (quizId: string) => {
     setSubmissionsLoading(true);
     try {
       const res = await fetch(`/api/quizzes/${quizId}/submissions`);
@@ -172,6 +140,37 @@ export default function AdminPage() {
     } finally {
       setSubmissionsLoading(false);
     }
+  }, []);
+
+  // Check saved admin key in sessionStorage
+  useEffect(() => {
+    const savedKey = sessionStorage.getItem('adminSecretKey');
+    if (savedKey) {
+      queueMicrotask(() => {
+        verifyKey(savedKey);
+      });
+    }
+  }, [verifyKey]);
+
+  // Fetch submissions when selectedQuizId changes
+  useEffect(() => {
+    if (selectedQuizId && isAuthenticated) {
+      queueMicrotask(() => {
+        fetchSubmissions(selectedQuizId);
+      });
+    }
+  }, [selectedQuizId, isAuthenticated, fetchSubmissions]);
+
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!secretKeyInput.trim()) return;
+    verifyKey(secretKeyInput.trim());
+  };
+
+  const handleLogout = () => {
+    sessionStorage.removeItem('adminSecretKey');
+    setIsAuthenticated(false);
+    setSecretKeyInput('');
   };
 
   // File Upload Handler (CSV / XLSX)
@@ -233,7 +232,7 @@ export default function AdminPage() {
       setQuestions(data.questions);
       alert(`ดึงข้อสอบจาก Google Sheet สำเร็จ ${data.count} ข้อ!`);
       setGoogleSheetUrl('');
-    } catch (err) {
+    } catch {
       setSheetImportError('ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์เพื่อดึงข้อมูล');
     } finally {
       setImportingSheet(false);
@@ -344,7 +343,7 @@ export default function AdminPage() {
       fetchQuizzes();
       setSelectedQuizId(createdQuiz.id);
       setActiveTab('quizzes');
-    } catch (err) {
+    } catch {
       setSaveError('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
     } finally {
       setSavingQuiz(false);
@@ -365,7 +364,7 @@ export default function AdminPage() {
       } else {
         alert('ลบไม่สำเร็จ');
       }
-    } catch (err) {
+    } catch {
       alert('เกิดข้อผิดพลาดในการลบ');
     }
   };
@@ -383,7 +382,7 @@ export default function AdminPage() {
       if (res.ok) {
         fetchSubmissions(selectedQuizId);
       }
-    } catch (err) {
+    } catch {
       alert('เกิดข้อผิดพลาดในการลบผลคะแนน');
     }
   };
@@ -405,7 +404,7 @@ export default function AdminPage() {
       } else {
         alert(`ซิงค์ล้มเหลว: ${data.error || 'โปรดตรวจสอบ Webhook URL'}`);
       }
-    } catch (err) {
+    } catch {
       alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
     } finally {
       setRetryingSyncId(null);
@@ -852,7 +851,7 @@ export default function AdminPage() {
 
               {/* Google Sheets Webhook URL */}
               <div>
-                <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
+                <label className="text-xs font-semibold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider mb-1.5 flex items-center justify-between">
                   <span>Google Sheets Webhook URL (รับคะแนน Real-time)</span>
                   <button
                     type="button"
@@ -1126,7 +1125,7 @@ export default function AdminPage() {
                       </button>
                     </div>
 
-                    <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
+                    <div className="space-y-2 max-h-100 overflow-y-auto pr-1">
                       {questions.map((q, idx) => {
                         const isExpanded = expandedQuestionId === q.id;
                         return (
@@ -1514,7 +1513,7 @@ export default function AdminPage() {
                 </button>
               </div>
 
-              <pre className="p-4 rounded-2xl bg-zinc-950 text-zinc-200 text-xs font-mono overflow-x-auto max-h-[300px] border border-zinc-800 leading-relaxed">
+              <pre className="p-4 rounded-2xl bg-zinc-950 text-zinc-200 text-xs font-mono overflow-x-auto max-h-75 border border-zinc-800 leading-relaxed">
                 {GOOGLE_APPS_SCRIPT_TEMPLATE}
               </pre>
             </div>

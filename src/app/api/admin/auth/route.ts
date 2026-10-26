@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
     } else {
       return NextResponse.json({ success: false, message: 'รหัสผ่าน Admin ไม่ถูกต้อง' }, { status: 401 });
     }
-  } catch (error) {
+  } catch {
     return NextResponse.json({ success: false, message: 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์' }, { status: 500 });
   }
 }

@@ -14,11 +14,13 @@ export default function ThemeToggle() {
 
     if (shouldBeDark) {
       document.documentElement.classList.add('dark');
-      setIsDark(true);
     } else {
       document.documentElement.classList.remove('dark');
-      setIsDark(false);
     }
+
+    queueMicrotask(() => {
+      setIsDark(shouldBeDark);
+    });
   }, []);
 
   const toggleTheme = (e: React.MouseEvent) => {
