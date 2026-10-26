@@ -475,10 +475,6 @@ export default function AdminPage() {
               )}
             </button>
           </form>
-
-          <p className="mt-5 text-[11px] text-zinc-400">
-            *ค่าเริ่มต้นใน .env คือ <code>admin1234</code>
-          </p>
         </div>
       </div>
     );

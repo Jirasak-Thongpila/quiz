@@ -21,6 +21,7 @@ export interface QuizSettings {
   tabSwitchWarning: boolean;
   showScoreOnComplete: boolean;
   googleSheetsWebhook: string; // URL to Google Apps Script Webhook
+  isPublic?: boolean; // true = สาธารณะ (แสดงหน้าแรก), false = ส่วนตัว (ให้อาจารย์ส่งรหัสให้เท่านั้น)
 }
 
 export interface Quiz {
